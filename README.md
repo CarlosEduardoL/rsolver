@@ -19,14 +19,15 @@ To use `rsolver`, run the following command:
 rsolver [OPTIONS] [DOMAIN]
 ```
 
-### Options
+### Arguments:
 
-- `-h, --help`: Prints help information
-- `-V, --version`: Prints version information
+`<DOMAIN>`  The domain to resolve
 
-### Arguments
+### Options:
 
-- `DOMAIN`: The domain to resolve.
+- `-f <FLAGS>`      These flags are used to control the behavior of DNS queries and responses [possible values: aa, tc, rd, ra, ad, cd]
+- `-h, --help`      Print help (see more with '--help')
+- `-V, --version`   Print version
 
 ## Examples
 
