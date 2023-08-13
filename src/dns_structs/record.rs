@@ -1,39 +1,65 @@
 use std::io::Read;
-use crate::dns_structs::reader::{DecodeError, NameDecoder, Reader};
+use std::net::{Ipv4Addr, Ipv6Addr};
+use crate::dns_structs::reader::{NameDecoder, Reader};
+use crate::dns_structs::record::Data::{A, AAAA, HostName, Other};
 use crate::enums::Class;
-use crate::Kind;
+use crate::{Kind, transform_result};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub enum Data {
+    HostName(String),
+    A(Ipv4Addr),
+    AAAA(Ipv6Addr),
+    Other(Vec<u8>),
+}
+
+#[derive(Debug, Clone)]
 pub struct DNSRecord {
-    pub(crate) name: String,
-    pub(crate) kind: Kind,
-    pub(crate) class: Class,
-    pub(crate) ttl: u32,
-    pub(crate) data: Vec<u8>,
+    pub name: String,
+    pub kind: Kind,
+    pub class: Class,
+    pub ttl: u32,
+    pub data: Data,
 }
 
 impl TryFrom<&mut Reader> for DNSRecord {
-    type Error = &'static str;
+    type Error = String;
 
     fn try_from(reader: &mut Reader) -> Result<Self, Self::Error> {
-        let name = match reader.decode_name() {
-            Err(DecodeError::Io(_)) => { return Err("An I/O error occurred while decoding the name."); }
-            Err(DecodeError::Utf8(_)) => { return Err("The decoded name is not valid UTF-8."); }
-            Ok(name) => name
+        let name = transform_result!(reader.decode_name())?;
+
+        let kind: u16 = transform_result!("Error reading kind from the response", reader.next_u16())?;
+        let class: u16 = transform_result!("Error reading class from the response", reader.next_u16())?;
+        let ttl: u32 = transform_result!("Error reading ttl from the response",reader.next_u32())?;
+        let data_len: u16 = transform_result!("Error reading data len from the response",reader.next_u16())?;
+
+        let kind = Kind::try_from(kind).map_err(|_| "Invalid kind")?;
+
+        let data = match kind {
+            Kind::NS => HostName(transform_result!(reader.decode_name())?),
+            Kind::A => {
+                assert_eq!(data_len, 4);
+                let mut ip = [0u8; 4];
+                transform_result!("Error reading ip from the response",reader.read_exact(&mut ip))?;
+                A(Ipv4Addr::from(ip))
+            }
+            Kind::AAAA => {
+                assert_eq!(data_len, 16);
+                let mut ip = [0u8; 16];
+                transform_result!("Error reading ip from the response",reader.read_exact(&mut ip))?;
+                AAAA(Ipv6Addr::from(ip))
+            }
+            _ => {
+                let mut data = vec![0; data_len as usize];
+                transform_result!("Error reading data from the response",reader.read_exact(&mut data))?;
+                Other(data)
+            }
         };
-
-        let kind: u16 = reader.next_u16().map_err(|_| "Error reading kind from the response")?;
-        let class: u16 = reader.next_u16().map_err(|_| "Error reading class from the response")?;
-        let ttl: u32 = reader.next_u32().map_err(|_| "Error reading ttl from the response")?;
-        let data_len: u16 = reader.next_u16().map_err(|_| "Error reading data len from the response")?;
-
-        let mut data = vec![0; data_len as usize];
-        reader.read_exact(&mut data).map_err(|_| "Error reading data from the response")?;
 
         Ok(
             Self {
                 name,
-                kind: Kind::try_from(kind).map_err(|_| "Invalid kind")?,
+                kind,
                 class: Class::try_from(class).map_err(|_| "Invalid class")?,
                 ttl,
                 data,

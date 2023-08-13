@@ -1,10 +1,13 @@
+use std::fmt::{Debug, Formatter};
 use std::io::{Read};
 use std::mem::size_of;
+use strum::IntoEnumIterator;
 use crate::dns_structs::reader::Reader;
 use crate::enums::Flag;
+use crate::transform_result;
 
 #[repr(transparent)]
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default)]
 pub struct Flags(pub u16);
 
 impl Flags {
@@ -12,6 +15,12 @@ impl Flags {
     pub fn compose(flags: &[Flag]) -> Self {
         let value = flags.iter().fold(0, |acc, flag| acc | *flag as u16);
         Self(value)
+    }
+}
+
+impl Debug for Flags {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", Flag::iter().filter(|flag| *flag as u16 & self.0 == *flag as u16).collect::<Vec<_>>())
     }
 }
 
@@ -70,13 +79,11 @@ impl DNSHeader {
 }
 
 impl TryFrom<&mut Reader> for DNSHeader {
-    type Error = &'static str;
+    type Error = String;
 
     fn try_from(reader: &mut Reader) -> Result<Self, Self::Error> {
         let mut buffer = [0u8; size_of::<Self>()];
-        if reader.read_exact(&mut buffer).is_err() {
-            return Err("Invalid input");
-        }
+        transform_result!("Cannot read the header from the response", reader.read_exact(&mut buffer))?;
 
         let id = u16::from_be_bytes([buffer[0], buffer[1]]);
         let flags = Flags(u16::from_be_bytes([buffer[2], buffer[3]]));

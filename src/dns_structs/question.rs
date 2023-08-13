@@ -1,7 +1,6 @@
-use std::io::Read;
-use crate::dns_structs::reader::{DecodeError, NameDecoder, Reader};
+use crate::dns_structs::reader::{NameDecoder, Reader};
 use crate::enums::{Class};
-use crate::Kind;
+use crate::{Kind, transform_result};
 
 /// DNS Question
 ///
@@ -41,17 +40,13 @@ impl DNSQuestion {
 }
 
 impl TryFrom<&mut Reader> for DNSQuestion {
-    type Error = &'static str;
+    type Error = String;
 
     fn try_from(reader: &mut Reader) -> Result<Self, Self::Error> {
-        let name = match reader.decode_name() {
-            Err(DecodeError::Io(_)) => { return Err("An I/O error occurred while decoding the name.") },
-            Err(DecodeError::Utf8(_)) => { return Err("The decoded name is not valid UTF-8.") },
-            Ok(name) => name
-        };
+        let name = transform_result!(reader.decode_name())?;
 
-        let kind = reader.next_u16().map_err(|_| "Error reading from the response")?;
-        let class = reader.next_u16().map_err(|_| "Error reading from the response")?;
+        let kind: u16 = transform_result!("Error reading kind from the response", reader.next_u16())?;
+        let class: u16 = transform_result!("Error reading class from the response", reader.next_u16())?;
 
         Ok(
             Self {
