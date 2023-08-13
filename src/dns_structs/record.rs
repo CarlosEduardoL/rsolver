@@ -5,26 +5,46 @@ use crate::dns_structs::record::Data::{A, AAAA, HostName, Other};
 use crate::enums::Class;
 use crate::{Kind, transform_result};
 
+/// An enumeration representing the different types of data that can be stored in a DNS record.
 #[derive(Debug, Clone)]
 pub enum Data {
+    /// A host name.
     HostName(String),
+    /// An IPv4 address.
     A(Ipv4Addr),
+    /// An IPv6 address.
     AAAA(Ipv6Addr),
+    /// Other data.
     Other(Vec<u8>),
 }
 
+/// A structure representing a DNS record.
 #[derive(Debug, Clone)]
 pub struct DNSRecord {
+    /// The name associated with the record.
     pub name: String,
+    /// The type of the record.
     pub kind: Kind,
+    /// The class of the record.
     pub class: Class,
+    /// The time-to-live value of the record.
     pub ttl: u32,
+    /// The data associated with the record.
     pub data: Data,
 }
 
 impl TryFrom<&mut Reader> for DNSRecord {
     type Error = String;
 
+    /// Attempts to create a `DNSRecord` from the given `Reader`.
+    ///
+    /// # Arguments
+    ///
+    /// * `reader` - A mutable reference to a `Reader` containing the bytes of a DNS record.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing either a `DNSRecord` or an error message.
     fn try_from(reader: &mut Reader) -> Result<Self, Self::Error> {
         let name = transform_result!(reader.decode_name())?;
 

@@ -1,6 +1,6 @@
 use std::net::Ipv4Addr;
 use clap::Parser;
-use rsolver::{Kind, resolve, send_query};
+use rsolver::{Kind, resolve};
 use rsolver::enums::Flag;
 
 #[derive(Parser)]
