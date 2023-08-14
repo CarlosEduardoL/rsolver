@@ -2,6 +2,7 @@ use std::net::{Ipv4Addr, UdpSocket};
 use crate::dns_structs::header::{DNSHeader, Flags};
 use crate::dns_structs::packet::DNSPacket;
 use crate::dns_structs::question::DNSQuestion;
+use crate::dns_structs::record::Data;
 use crate::enums::{Class, Flag};
 pub use crate::enums::Kind;
 
@@ -9,28 +10,41 @@ pub mod dns_structs;
 pub mod enums;
 pub mod errors;
 
+/// A structure representing the arguments for a DNS query.
+#[derive(Debug, Clone)]
+pub struct QueryArgs {
+    /// The domain name to query.
+    pub domain_name: String,
+    /// The IPv4 address of the name server to send the query to.
+    pub name_server: Ipv4Addr,
+    /// The type of DNS record to query.
+    pub record_type: Kind,
+    /// An array of flags to include in the query.
+    pub flags: Vec<Flag>,
+    /// Whether to print debug information.
+    pub debug: bool,
+}
+
 /// Builds a DNS query for the given domain name and record type.
 ///
 /// # Arguments
 ///
-/// * `domain_name` - The domain name to query.
-/// * `record_type` - The type of DNS record to query.
-/// * `flags` - An array of flags to include in the query.
+/// * `args` - A `QueryArgs` structure containing the arguments for the query.
 ///
 /// # Returns
 ///
 /// A `Vec<u8>` containing the bytes of the DNS query.
-fn build_query(domain_name: &str, record_type: Kind, flags: &[Flag]) -> Vec<u8> {
+fn build_query(args: &QueryArgs) -> Vec<u8> {
     let id = rand::random();
     let mut query = DNSHeader {
         id,
-        flags: Flags::compose(flags),
+        flags: Flags::compose(&args.flags),
         num_questions: 1,
         ..DNSHeader::default()
     }.to_bytes();
     query.extend_from_slice(&DNSQuestion {
-        name: domain_name.to_string(),
-        kind: record_type,
+        name: args.domain_name.to_string(),
+        kind: args.record_type,
         class: Class::IN,
     }.to_bytes());
     return query;
@@ -40,18 +54,15 @@ fn build_query(domain_name: &str, record_type: Kind, flags: &[Flag]) -> Vec<u8> 
 ///
 /// # Arguments
 ///
-/// * `domain_name` - The domain name to query.
-/// * `name_server` - The IPv4 address of the name server to send the query to.
-/// * `record_type` - The type of DNS record to query.
-/// * `flags` - An array of flags to include in the query.
+/// * `args` - A `QueryArgs` structure containing the arguments for the query.
 ///
 /// # Returns
 ///
 /// A `Result` containing either a `DNSPacket` representing the response or an error message.
-fn send_query(domain_name: &str, name_server: Ipv4Addr, record_type: Kind, flags: &[Flag]) -> Result<DNSPacket, String> {
-    let query = build_query(domain_name, record_type, flags);
+fn send_query(args: &QueryArgs) -> Result<DNSPacket, String> {
+    let query = build_query(args);
     let socket = transform_result!(UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 12345)))?;
-    transform_result!(socket.connect((name_server, 53)))?;
+    transform_result!(socket.connect((args.name_server, 53)))?;
     transform_result!(socket.send(&query))?;
     let mut answer = vec![0; 2048];
     let _ = transform_result!(socket.recv(&mut answer))?;
@@ -62,26 +73,35 @@ fn send_query(domain_name: &str, name_server: Ipv4Addr, record_type: Kind, flags
 ///
 /// # Arguments
 ///
-/// * `domain_name` - The domain name to resolve.
-/// * `name_server` - The IPv4 address of the initial name server to use for resolution.
-/// * `record_type` - The type of DNS record to use for resolution.
-/// * `flags` - An array of flags to include in the queries sent during resolution.
+/// * `args` - A `QueryArgs` structure containing the arguments for the resolution.
 ///
 /// # Returns
 ///
 /// A `Result` containing either an `Ipv4Addr` representing the resolved IP address or an error message.
-pub fn resolve(domain_name: &str, mut name_server: Ipv4Addr, record_type: Kind, flags: &[Flag]) -> Result<Ipv4Addr, String> {
+pub fn resolve(args: &QueryArgs) -> Result<Data, String> {
+    let mut name_server = args.name_server;
     loop {
-        println!("Querying {name_server} for {domain_name}");
-        let response = send_query(domain_name, name_server, record_type, flags)?;
-        if let Some(ip) = response.get_answer() {
+        if args.debug {
+            println!("Querying {name_server} for {}", args.domain_name);
+        }
+        let response = send_query(&QueryArgs {name_server, ..args.clone()})?;
+        if let Some(ip) = response.get_answer(args.record_type) {
             return Ok(ip)
         } else if let Some(ip) = response.get_name_server_ip() {
             name_server = ip;
         } else if let Some(domain_name) = response.get_name_server() {
-            name_server = resolve(&domain_name, name_server, record_type, flags)?;
+            let new_args = QueryArgs {
+                domain_name: domain_name.clone(),
+                name_server,
+                record_type: Kind::A,
+                ..args.clone()
+            };
+            name_server = match resolve(&new_args)? {
+                Data::A(ip) => ip,
+                _ => { return transform_result!(Err("This will never happens")) }
+            };
         } else {
-            return Err("Cannot resolve :(".to_string())
+            return transform_result!(Err("Cannot resolve :("))
         }
     }
 }

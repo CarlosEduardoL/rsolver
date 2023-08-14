@@ -1,7 +1,8 @@
+use std::fmt::{Display, Formatter};
 use std::io::Read;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use crate::dns_structs::reader::{NameDecoder, Reader};
-use crate::dns_structs::record::Data::{A, AAAA, HostName, Other};
+use crate::dns_structs::record::Data::{A, AAAA, NS, Other};
 use crate::enums::Class;
 use crate::{Kind, transform_result};
 
@@ -9,13 +10,24 @@ use crate::{Kind, transform_result};
 #[derive(Debug, Clone)]
 pub enum Data {
     /// A host name.
-    HostName(String),
+    NS(String),
     /// An IPv4 address.
     A(Ipv4Addr),
     /// An IPv6 address.
     AAAA(Ipv6Addr),
     /// Other data.
     Other(Vec<u8>),
+}
+
+impl Display for Data {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NS(hostname) => write!(f, "{}", hostname),
+            A(ip) => write!(f, "{}", ip),
+            AAAA(ip) => write!(f, "{}", ip),
+            Other(raw_data) => write!(f, "{}", String::from_utf8_lossy(raw_data))
+        }
+    }
 }
 
 /// A structure representing a DNS record.
@@ -56,7 +68,7 @@ impl TryFrom<&mut Reader> for DNSRecord {
         let kind = Kind::try_from(kind).map_err(|_| "Invalid kind")?;
 
         let data = match kind {
-            Kind::NS => HostName(transform_result!(reader.decode_name())?),
+            Kind::NS => NS(transform_result!(reader.decode_name())?),
             Kind::A => {
                 assert_eq!(data_len, 4);
                 let mut ip = [0u8; 4];

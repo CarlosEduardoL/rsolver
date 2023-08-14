@@ -15,17 +15,14 @@ pub struct DNSPacket {
 }
 
 impl DNSPacket {
-    pub fn get_answer(&self) -> Option<Ipv4Addr> {
+    pub fn get_answer(&self, record_type: Kind) -> Option<Data> {
         self.answers
             .iter()
-            .filter(|answer| answer.kind == Kind::A)
+            .filter(|answer| answer.kind == record_type)
             .next()
-            .map(|answer| match answer.data {
-                Data::A(ip) => ip,
-                _ => unreachable!()
-            })
+            .map(|answer| answer.data.clone() )
     }
-    
+
     pub fn get_name_server_ip(&self) -> Option<Ipv4Addr> {
         self.additionals
             .iter()
@@ -43,7 +40,7 @@ impl DNSPacket {
             .filter(|answer| answer.kind == Kind::NS)
             .next()
             .map(|answer| match &answer.data {
-                Data::HostName(host) => host.clone(),
+                Data::NS(host) => host.clone(),
                 _ => unreachable!()
             })
     }
