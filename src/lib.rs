@@ -79,24 +79,23 @@ fn send_query(args: &QueryArgs) -> Result<DNSPacket, String> {
 ///
 /// A `Result` containing either an `Ipv4Addr` representing the resolved IP address or an error message.
 pub fn resolve(args: &QueryArgs) -> Result<Data, String> {
-    let mut name_server = args.name_server;
+    let mut args = args.clone();
     loop {
         if args.debug {
-            println!("Querying {name_server} for {}", args.domain_name);
+            println!("Querying {} for {}", &args.name_server, args.domain_name);
         }
-        let response = send_query(&QueryArgs {name_server, ..args.clone()})?;
+        let response = send_query(&args)?;
         if let Some(ip) = response.get_answer(args.record_type) {
             return Ok(ip)
         } else if let Some(ip) = response.get_name_server_ip() {
-            name_server = ip;
+            args.name_server = ip;
         } else if let Some(domain_name) = response.get_name_server() {
             let new_args = QueryArgs {
                 domain_name: domain_name.clone(),
-                name_server,
                 record_type: Kind::A,
                 ..args.clone()
             };
-            name_server = match resolve(&new_args)? {
+            args.name_server = match resolve(&new_args)? {
                 Data::A(ip) => ip,
                 _ => { return transform_result!(Err("This will never happens")) }
             };

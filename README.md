@@ -1,4 +1,4 @@
-# rsolver
+# **rs**olver
 
 `rsolver` is a simple DNS resolver CLI utility written in Rust.
 
