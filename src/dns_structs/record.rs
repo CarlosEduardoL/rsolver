@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::io::Read;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use crate::dns_structs::reader::{NameDecoder, Reader};
-use crate::dns_structs::record::Data::{A, AAAA, NS, Other};
+use crate::dns_structs::record::Data::{Host, IPv4, IPv6, Other};
 use crate::enums::Class;
 use crate::{Kind, transform_result};
 
@@ -10,11 +10,11 @@ use crate::{Kind, transform_result};
 #[derive(Debug, Clone)]
 pub enum Data {
     /// A host name.
-    NS(String),
+    Host(String),
     /// An IPv4 address.
-    A(Ipv4Addr),
+    IPv4(Ipv4Addr),
     /// An IPv6 address.
-    AAAA(Ipv6Addr),
+    IPv6(Ipv6Addr),
     /// Other data.
     Other(Vec<u8>),
 }
@@ -22,9 +22,9 @@ pub enum Data {
 impl Display for Data {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            NS(hostname) => write!(f, "{}", hostname),
-            A(ip) => write!(f, "{}", ip),
-            AAAA(ip) => write!(f, "{}", ip),
+            Host(hostname) => write!(f, "{}", hostname),
+            IPv4(ip) => write!(f, "{}", ip),
+            IPv6(ip) => write!(f, "{}", ip),
             Other(raw_data) => write!(f, "{}", String::from_utf8_lossy(raw_data))
         }
     }
@@ -68,19 +68,20 @@ impl TryFrom<&mut Reader> for DNSRecord {
         let kind = Kind::try_from(kind).map_err(|_| "Invalid kind")?;
 
         let data = match kind {
-            Kind::NS => NS(transform_result!(reader.decode_name())?),
+            Kind::NS => Host(transform_result!(reader.decode_name())?),
             Kind::A => {
                 assert_eq!(data_len, 4);
                 let mut ip = [0u8; 4];
                 transform_result!("Error reading ip from the response",reader.read_exact(&mut ip))?;
-                A(Ipv4Addr::from(ip))
+                IPv4(Ipv4Addr::from(ip))
             }
             Kind::AAAA => {
                 assert_eq!(data_len, 16);
                 let mut ip = [0u8; 16];
                 transform_result!("Error reading ip from the response",reader.read_exact(&mut ip))?;
-                AAAA(Ipv6Addr::from(ip))
-            }
+                IPv6(Ipv6Addr::from(ip))
+            },
+            Kind::CNAME => Host(transform_result!(reader.decode_name())?),
             _ => {
                 let mut data = vec![0; data_len as usize];
                 transform_result!("Error reading data from the response",reader.read_exact(&mut data))?;

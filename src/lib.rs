@@ -4,11 +4,20 @@ use crate::dns_structs::packet::DNSPacket;
 use crate::dns_structs::question::DNSQuestion;
 use crate::dns_structs::record::Data;
 use crate::enums::{Class, Flag};
+use clap::ValueEnum;
 pub use crate::enums::Kind;
 
 pub mod dns_structs;
 pub mod enums;
 pub mod errors;
+
+#[repr(u8)]
+#[derive(Copy, Clone, ValueEnum, Debug, PartialEq, Eq)]
+pub enum LogLevel {
+    None = 0,
+    Info = 1,
+    Debug = 2
+}
 
 /// A structure representing the arguments for a DNS query.
 #[derive(Debug, Clone)]
@@ -22,7 +31,7 @@ pub struct QueryArgs {
     /// An array of flags to include in the query.
     pub flags: Vec<Flag>,
     /// Whether to print debug information.
-    pub debug: bool,
+    pub log_level: LogLevel,
 }
 
 /// Builds a DNS query for the given domain name and record type.
@@ -78,15 +87,22 @@ fn send_query(args: &QueryArgs) -> Result<DNSPacket, String> {
 /// # Returns
 ///
 /// A `Result` containing either an `Ipv4Addr` representing the resolved IP address or an error message.
-pub fn resolve(args: &QueryArgs) -> Result<Data, String> {
+pub fn resolve(args: &QueryArgs) -> Result<Vec<Data>, String> {
     let mut args = args.clone();
     loop {
-        if args.debug {
+        if args.log_level as u8 >= LogLevel::Info as u8 {
             println!("Querying {} for {}", &args.name_server, args.domain_name);
         }
+        if args.log_level as u8 >= LogLevel::Debug as u8 {
+            println!("{args:?}");
+        }
         let response = send_query(&args)?;
-        if let Some(ip) = response.get_answer(args.record_type) {
-            return Ok(ip)
+        if args.log_level as u8 >= LogLevel::Debug as u8 {
+            println!("{response:#?}");
+        }
+        let answers = response.get_answers(args.record_type);
+        if !answers.is_empty() {
+            return Ok(answers)
         } else if let Some(ip) = response.get_name_server_ip() {
             args.name_server = ip;
         } else if let Some(domain_name) = response.get_name_server() {
@@ -95,12 +111,13 @@ pub fn resolve(args: &QueryArgs) -> Result<Data, String> {
                 record_type: Kind::A,
                 ..args.clone()
             };
-            args.name_server = match resolve(&new_args)? {
-                Data::A(ip) => ip,
+            let result = resolve(&new_args)?;
+            args.name_server = match result.into_iter().next() {
+                Some(Data::IPv4(ip)) => ip,
                 _ => { return transform_result!(Err("This will never happens")) }
             };
         } else {
-            return transform_result!(Err("Cannot resolve :("))
+            return Err(format!("Cannot resolve {} on server {}", &args.domain_name, &args.name_server))
         }
     }
 }

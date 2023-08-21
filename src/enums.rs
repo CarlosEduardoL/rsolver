@@ -121,6 +121,8 @@ pub enum Kind {
     TA = 32768,
     /// DNSSEC Lookaside Validation record - RFC 4431
     DLV = 32769,
+    /// Don't filter any response
+    ANY,
 }
 
 /// This is a Rust implementation of the DNS class types defined in RFC 1035 section 3.2.4.

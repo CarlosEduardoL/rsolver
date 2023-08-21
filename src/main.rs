@@ -1,6 +1,6 @@
 use std::net::Ipv4Addr;
 use clap::Parser;
-use rsolver::{Kind, resolve, QueryArgs};
+use rsolver::{Kind, resolve, QueryArgs, LogLevel};
 use rsolver::enums::Flag;
 use rsolver::errors::ResolverResult;
 
@@ -14,14 +14,14 @@ struct Rsolver {
     /// NameServer IP Address
     name_server: Ipv4Addr,
     /// The record type
-    #[clap(long="type", short='t', default_value_t=Kind::A, value_enum)]
+    #[clap(long="type", short='t', default_value_t=Kind::ANY, value_enum)]
     kind: Kind,
     #[clap(short)]
     /// These flags are used to control the behavior of DNS queries and responses.
     flags: Vec<Flag>,
-    #[clap(short)]
+    #[clap(short, default_value_t=LogLevel::None, value_enum)]
     /// If true shows all the Queries if false just show the result.
-    verbose: bool
+    log_level: LogLevel
 }
 
 fn main() -> ResolverResult<()> {
@@ -31,9 +31,11 @@ fn main() -> ResolverResult<()> {
         name_server: cli.name_server,
         record_type: cli.kind,
         flags: cli.flags,
-        debug: cli.verbose,
+        log_level: cli.log_level,
     };
     let response = resolve(&args);
-    println!("{}", response?);
+    for answer in response? {
+        println!("{answer}");
+    }
     Ok(())
 }
